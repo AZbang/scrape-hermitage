@@ -7,17 +7,24 @@ const fs = require('fs');
 const ITEM_TYPES = ['.'];
 const SCRAPE_DIR = 'static/';
 const DB_HERMITAGE = 'http://test.hermitagemuseum.org:7111';
-const TIMEOUT = 200;
+const TIMEOUT = 10000;
+const REQUEST_AWAIT = 3000;
+const REQUEST_COUNTS = 20;
 
 // UTILS
 const getData = (url) => {
   return request({
     uri: url,
+    timeout: TIMEOUT,
     transform: (body) => cheerio.load(body, {
       normalizeWhitespace: true,
       xmlMode: true
     })
   })
+}
+
+const timeout = (ms) => {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // PARSE DATA
@@ -65,36 +72,81 @@ const getRoomByHotspot = ($hotspot) => {
 
 // LOAD DATA
 const getItem = async (src) => {
-  const $ = await getData(DB_HERMITAGE + src);
-  const meta = getItemMeta(src);
-  return {
-    id: meta.id,
-    type: meta.type,
-    title: $('.content-title').text().replace('&nbsp;', ''),
-    image: $('.image-popup').attr('href'),
-    description: $('.cell-description').text(),
+  try {
+    const $ = await getData(DB_HERMITAGE + src);
+    if($('.error-message').text()) return null;
+    else if(!$('.content-title').text()) throw Error();
+
+    const meta = getItemMeta(src);
+    const table = [];
+    $('.field-value').each((value) => {
+      table.push($(value).text());
+    });
+
+    return {
+      id: meta.id,
+      type: meta.type,
+      title: $('.content-title').text().replace('&nbsp;', ''),
+      image: $('.image-popup').attr('href'),
+      description: $('.cell-description').text(),
+      category: table[0],
+      author: table[1],
+      country: table[2],
+      created: table[3]
+    }
+  } catch(e) {
+    await timeout(TIMEOUT);
+    const data = await getItem(src);
+    return data;
   }
 }
 
 const getRoom = async (src) => {
-  const $ = await getData(DB_HERMITAGE + src);
-  const nav = parseRoomNav(src);
+  try {
+    const $ = await getData(DB_HERMITAGE + src);
+    if($('.error-message').text()) return null;
+    else if(!$('.content-title').text()) throw Error();
 
-  return {
-    id: nav.room,
-    floor: nav.floor,
-    title: $('.content-title').text().replace('&nbsp;', ''),
-    description: $('.popupScroller').text(),
+    const nav = parseRoomNav(src);
+
+    return {
+      id: nav.room,
+      floor: nav.floor,
+      title: $('.content-title').text().replace('&nbsp;', ''),
+      description: $('.popupScroller').text(),
+    }
+  } catch(e) {
+    await timeout(TIMEOUT);
+    const data = await getRoom(src);
+    return data;
+  }
+}
+
+const getImage = async (src, filename) => {
+  try {
+    await download.image({timeout: TIMEOUT, url: src, dest: filename});
+    return filename;
+  } catch(e) {
+    await timeout(TIMEOUT);
+    const data = await getImage(src, filename);
+    return data;
   }
 }
 
 // SCRAPING
 const scrapeImages = async (dirMuseum, items) => {
   const promises = [];
+  let progress = 0;
+
+  items = items.filter((item) => item.image != null);
+
   items.forEach((item, i) => promises.push((async () => {
+    await timeout(REQUEST_AWAIT*Math.floor(i/REQUEST_COUNTS));
+
     const path = dirMuseum + '/items/' + item.id + '.jpg';
-    await download.image({url: item.image, dest: path});
-    console.log('Scraping image ' + i + ' is completed!');
+    await getImage(item.image, path);
+
+    console.log(`SUCCESS IMAGE ${item.id} | PROGRESS: ${++progress}/${items.length}`);
     return path;
   })()));
 
@@ -106,21 +158,27 @@ const scrapeImages = async (dirMuseum, items) => {
 const scrapeItems = async (dirMuseum, museumId) => {
   const $ = await getData(`http://hermitagemuseum.org/3d/html/pwoa/${museumId}/pano.xml`);
   const promises = [];
+  const total = $('hotspot[skinid="woa_info"]').length;
+  let progress = 0;
 
   $('hotspot[skinid="woa_info"]').each((i, $hotspot) => promises.push((async () => {
+    await timeout(REQUEST_AWAIT*Math.floor(i/REQUEST_COUNTS));
+
     const src = $hotspot.attribs.description;
     if(src.search(new RegExp(ITEM_TYPES.join('|'), 'i')) == -1) return;
 
     const item = await getItem(src);
+    if(!item) return;
+
     item.room = getRoomByHotspot($($hotspot));
 
-    console.log('Scraping item ' + i + ' is completed!');
+    console.log(`SUCCESS ITEM ${item.id} | PROGRESS: ${++progress}/${total}`);
     return item;
   })()));
 
 
   let items = await Promise.all(promises);
-  items = items.filter((item) => item != null && item.image != null);
+  items = items.filter((item) => item != null);
   fs.writeFileSync(dirMuseum + '/items.json', JSON.stringify(items, null, 4));
 
   console.log('Total items ' + items.length)
@@ -130,8 +188,12 @@ const scrapeItems = async (dirMuseum, museumId) => {
 const scrapeRooms = async (dirMuseum, museumId) => {
   const $ = await getData(`http://hermitagemuseum.org/3d/html/pwoa/${museumId}/pano.xml`);
   const promises = [];
+  const total = $('panorama').length;
+  let progress = 0;
 
   $('panorama').each((i, $room) => promises.push((async () => {
+    await timeout(REQUEST_AWAIT*Math.floor(i/REQUEST_COUNTS));
+
     // get hotspots
     const hotspots = getHotspotsRoom($($room));
     if(!hotspots.items.length) return;
@@ -139,6 +201,7 @@ const scrapeRooms = async (dirMuseum, museumId) => {
     // get room data
     const roomUrl = getRoomUrl($($room));
     const room = await getRoom(roomUrl);
+    if(!room) return;
 
     room.links = hotspots.links.map((node) => {
       const url = getRoomUrl($(`panorama[id="${node}"]`));
@@ -146,7 +209,7 @@ const scrapeRooms = async (dirMuseum, museumId) => {
     });
     room.items = hotspots.items.map((url) => parseInt(url.split('/').pop()));
 
-    console.log('Scraping room ' + i + ' is completed!');
+    console.log(`SUCCESS ROOM ${room.id} | PROGRESS: ${++progress}/${total}`);
     return room;
   })()));
 
