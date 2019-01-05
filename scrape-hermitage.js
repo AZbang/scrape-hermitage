@@ -7,6 +7,7 @@ const fs = require('fs');
 const ITEM_TYPES = ['.'];
 const SCRAPE_DIR = 'static/';
 const DB_HERMITAGE = 'http://test.hermitagemuseum.org:7111';
+const TIMEOUT = 200;
 
 // UTILS
 const getData = (url) => {
@@ -21,6 +22,8 @@ const getData = (url) => {
 
 // PARSE DATA
 const parseRoomNav = (src) => {
+  src = src.replace(/$\//, '').replace(/\/+$/, '');
+
   const navs = src.split('/').pop().split('_');
   const room = parseInt(navs[2].slice(1));
   const floor = parseInt(navs[1].slice(1));
@@ -29,6 +32,8 @@ const parseRoomNav = (src) => {
 }
 
 const getItemMeta = (src) => {
+  src = src.replace(/$\//, '').replace(/\/+$/, '');
+
   return {
     id: parseInt(src.split('/').pop()),
     type: src.split('/')[src.split('/').length-2]
@@ -86,7 +91,6 @@ const getRoom = async (src) => {
 // SCRAPING
 const scrapeImages = async (dirMuseum, items) => {
   const promises = [];
-  console.log(items);
   items.forEach((item, i) => promises.push((async () => {
     const path = dirMuseum + '/items/' + item.id + '.jpg';
     await download.image({url: item.image, dest: path});
@@ -116,7 +120,7 @@ const scrapeItems = async (dirMuseum, museumId) => {
 
 
   let items = await Promise.all(promises);
-  items = items.filter((item) => item != null);
+  items = items.filter((item) => item != null && item.image != null);
   fs.writeFileSync(dirMuseum + '/items.json', JSON.stringify(items, null, 4));
 
   console.log('Total items ' + items.length)
@@ -160,11 +164,11 @@ const scrapeMuseum = async (museumId) => {
   mkdirp.sync(dirMuseum);
   mkdirp.sync(dirMuseum + '/items');
 
-  const rooms = await scrapeRooms(dirMuseum, museumId);
+  // const rooms = await scrapeRooms(dirMuseum, museumId);
   const items = await scrapeItems(dirMuseum, museumId);
   await scrapeImages(dirMuseum, items);
 
   console.log('Scraping ' + museumId + ' hermitage building is completed!');
 }
 
-scrapeMuseum('peter');
+scrapeMuseum('staff');
