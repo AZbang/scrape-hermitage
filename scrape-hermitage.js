@@ -4,7 +4,13 @@ const cheerio = require('cheerio');
 const mkdirp = require('mkdirp');
 const fs = require('fs');
 
-const ITEM_TYPES = ['.'];
+const ITEM_TYPES = /.+/;
+const MUSEUMS = {
+  staff: 'http://hermitagemuseum.org/3d/html/pwoa/staff/pano.xml',
+  peter: 'http://hermitagemuseum.org/3d/html/pwoa/peter/pano.xml',
+  main: 'http://hermitagemuseum.org/3d/html/pwoaen/peter/pano.xml',
+  kazan:  'http://hermitagemuseum.org/3d/html/pwoaen/kazan/pano.xml'
+}
 const SCRAPE_DIR = 'static/';
 const DB_HERMITAGE = 'http://test.hermitagemuseum.org:7111';
 const TIMEOUT = 10000;
@@ -29,7 +35,7 @@ const timeout = (ms) => {
 
 // PARSE DATA
 const parseRoomNav = (src) => {
-  src = src.replace(/$\//, '').replace(/\/+$/, '');
+  src = src.replace(/\/+$/, '');
 
   const navs = src.split('/').pop().split('_');
   const room = parseInt(navs[2].slice(1));
@@ -39,7 +45,7 @@ const parseRoomNav = (src) => {
 }
 
 const getItemMeta = (src) => {
-  src = src.replace(/$\//, '').replace(/\/+$/, '');
+  src = src.replace(/\/+$/, '');
 
   return {
     id: parseInt(src.split('/').pop()),
@@ -56,8 +62,7 @@ const getHotspotsRoom = ($room) => {
   $room.find('hotspot').each((i, point) => {
     if(point.attribs.skinid === 'woa_info') {
       const src = point.attribs.description;
-      if(src.search(new RegExp(ITEM_TYPES.join('|'), 'i')) != -1)
-        items.push(src);
+      if(src.search(ITEM_TYPES) != -1) items.push(src);
     } else if(point.attribs.skinid === 'ht_node') {
       links.push(point.attribs.url.slice(1, -1));
     }
@@ -79,7 +84,7 @@ const getItem = async (src) => {
 
     const meta = getItemMeta(src);
     const table = [];
-    $('.field-value').each((value) => {
+    $('.field-value').each((i, value) => {
       table.push($(value).text());
     });
 
@@ -156,7 +161,7 @@ const scrapeImages = async (dirMuseum, items) => {
 }
 
 const scrapeItems = async (dirMuseum, museumId) => {
-  const $ = await getData(`http://hermitagemuseum.org/3d/html/pwoa/${museumId}/pano.xml`);
+  const $ = await getData(MUSEUMS[museumId]);
   const promises = [];
   const total = $('hotspot[skinid="woa_info"]').length;
   let progress = 0;
@@ -165,7 +170,7 @@ const scrapeItems = async (dirMuseum, museumId) => {
     await timeout(REQUEST_AWAIT*Math.floor(i/REQUEST_COUNTS));
 
     const src = $hotspot.attribs.description;
-    if(src.search(new RegExp(ITEM_TYPES.join('|'), 'i')) == -1) return;
+    if(src.search(ITEM_TYPES) == -1) return;
 
     const item = await getItem(src);
     if(!item) return;
@@ -186,7 +191,7 @@ const scrapeItems = async (dirMuseum, museumId) => {
 }
 
 const scrapeRooms = async (dirMuseum, museumId) => {
-  const $ = await getData(`http://hermitagemuseum.org/3d/html/pwoa/${museumId}/pano.xml`);
+  const $ = await getData(MUSEUMS[museumId]);
   const promises = [];
   const total = $('panorama').length;
   let progress = 0;
@@ -227,11 +232,11 @@ const scrapeMuseum = async (museumId) => {
   mkdirp.sync(dirMuseum);
   mkdirp.sync(dirMuseum + '/items');
 
-  // const rooms = await scrapeRooms(dirMuseum, museumId);
+  const rooms = await scrapeRooms(dirMuseum, museumId);
   const items = await scrapeItems(dirMuseum, museumId);
   await scrapeImages(dirMuseum, items);
 
   console.log('Scraping ' + museumId + ' hermitage building is completed!');
 }
 
-scrapeMuseum('staff');
+scrapeMuseum('peter');
