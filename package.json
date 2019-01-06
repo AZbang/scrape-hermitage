@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "scrape-hermitage": "node scrape-hermitage.js"
+    "scrape-hermitage": "node index.js"
   },
   "author": "",
   "license": "ISC",

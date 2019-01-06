@@ -239,4 +239,9 @@ const scrapeMuseum = async (museumId) => {
   console.log('Scraping ' + museumId + ' hermitage building is completed!');
 }
 
-scrapeMuseum('peter');
+module.exports = {
+  scrapeImages,
+  scrapeItems,
+  scrapeRooms,
+  scrapeMuseum,
+}
