@@ -1,0 +1,29 @@
+[
+  {
+    "id": "main",
+    "name": "Главный Штаб Эрмитажа",
+    "description": "",
+    "request": "http://hermitagemuseum.org/3d/html/pwoaen/main/pano.xml"
+  },
+  {
+    "id": "staff",
+    "name": "Эрмитажный комплекс",
+    "locked": true,
+    "description": "",
+    "request": "http://hermitagemuseum.org/3d/html/pwoa/staff/pano.xml"
+  },
+  {
+    "id": "peter",
+    "name": "Эрмитаж. Зимний дворец",
+    "locked": true,
+    "description": "",
+    "request": "http://hermitagemuseum.org/3d/html/pwoa/peter/pano.xml"
+  },
+  {
+    "id": "kazan",
+    "name": "Эрмитаж в Казани",
+    "locked": true,
+    "description": "",
+    "request": "http://hermitagemuseum.org/3d/html/pwoaen/kazan/pano.xml"
+  }
+]

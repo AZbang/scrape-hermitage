@@ -4,18 +4,16 @@ const cheerio = require('cheerio');
 const mkdirp = require('mkdirp');
 const fs = require('fs');
 
+const museums = require('./museums.json');
+
 const ITEM_TYPES = /.+/;
-const MUSEUMS = {
-  staff: 'http://hermitagemuseum.org/3d/html/pwoa/staff/pano.xml',
-  peter: 'http://hermitagemuseum.org/3d/html/pwoa/peter/pano.xml',
-  main: 'http://hermitagemuseum.org/3d/html/pwoaen/peter/pano.xml',
-  kazan:  'http://hermitagemuseum.org/3d/html/pwoaen/kazan/pano.xml'
-}
 const SCRAPE_DIR = 'static/';
 const DB_HERMITAGE = 'http://test.hermitagemuseum.org:7111';
+const HOST = 'http://85.143.216.46:49160';
 const TIMEOUT = 10000;
 const REQUEST_AWAIT = 3000;
 const REQUEST_COUNTS = 20;
+const TABS = 0;
 
 // UTILS
 const getData = (url) => {
@@ -42,6 +40,10 @@ const parseRoomNav = (src) => {
   const floor = parseInt(navs[1].slice(1));
 
   return {room, floor};
+}
+
+const getMuseum = (id) => {
+  return museums.filter((m) => m.id === id)[0].request;
 }
 
 const getItemMeta = (src) => {
@@ -92,7 +94,7 @@ const getItem = async (src) => {
       id: meta.id,
       type: meta.type,
       title: $('.content-title').text().replace('&nbsp;', ''),
-      image: $('.image-popup').attr('href'),
+      original_image: $('.image-popup').attr('href'),
       description: $('.cell-description').text(),
       category: table[0],
       author: table[1],
@@ -161,7 +163,7 @@ const scrapeImages = async (dirMuseum, items) => {
 }
 
 const scrapeItems = async (dirMuseum, museumId) => {
-  const $ = await getData(MUSEUMS[museumId]);
+  const $ = await getData(getMuseum(museumId));
   const promises = [];
   const total = $('hotspot[skinid="woa_info"]').length;
   let progress = 0;
@@ -176,6 +178,7 @@ const scrapeItems = async (dirMuseum, museumId) => {
     if(!item) return;
 
     item.room = getRoomByHotspot($($hotspot));
+    item.image = HOST + dirMuseum + '/items/' + item.id + '.jpg';
 
     console.log(`SUCCESS ITEM ${item.id} | PROGRESS: ${++progress}/${total}`);
     return item;
@@ -184,14 +187,14 @@ const scrapeItems = async (dirMuseum, museumId) => {
 
   let items = await Promise.all(promises);
   items = items.filter((item) => item != null);
-  fs.writeFileSync(dirMuseum + '/items.json', JSON.stringify(items, null, 4));
+  fs.writeFileSync(dirMuseum + '/items.json', JSON.stringify(items, null, TABS));
 
   console.log('Total items ' + items.length)
   return items;
 }
 
 const scrapeRooms = async (dirMuseum, museumId) => {
-  const $ = await getData(MUSEUMS[museumId]);
+  const $ = await getData(getMuseum(museumId));
   const promises = [];
   const total = $('panorama').length;
   let progress = 0;
@@ -220,23 +223,39 @@ const scrapeRooms = async (dirMuseum, museumId) => {
 
   let rooms = await Promise.all(promises);
   rooms = rooms.filter((room) => room != null);
-  fs.writeFileSync(dirMuseum + '/rooms.json', JSON.stringify(rooms, null, 4));
+  fs.writeFileSync(dirMuseum + '/rooms.json', JSON.stringify(rooms, null, TABS));
 
   console.log('Total rooms ' + rooms.length);
   return rooms;
 }
 
-const scrapeMuseum = async (museumId) => {
+const scrapeMuseum = async (museumId, {isRooms=true, isItems=true, isImages=true}) => {
   const dirMuseum = SCRAPE_DIR + 'hermitage_' + museumId;
+  console.log('Scraping ' + museumId + ' hermitage building is started!');
 
   mkdirp.sync(dirMuseum);
-  mkdirp.sync(dirMuseum + '/items');
 
-  const rooms = await scrapeRooms(dirMuseum, museumId);
-  const items = await scrapeItems(dirMuseum, museumId);
-  await scrapeImages(dirMuseum, items);
+  if(isRooms) {
+    await scrapeRooms(dirMuseum, museumId);
+  }
+
+  if(isItems) {
+    await scrapeItems(dirMuseum, museumId);
+  }
+
+  if(isImages) {
+    mkdirp.sync(dirMuseum + '/items');
+    await scrapeImages(dirMuseum, items);
+  }
 
   console.log('Scraping ' + museumId + ' hermitage building is completed!');
+}
+
+const scrapeMuseums = async (gets) => {
+  fs.writeFileSync(SCRAPE_DIR + '/museums.json', JSON.stringify(museums, null, TABS));
+  for(const museum of museums) {
+    await scrapeMuseum(museum.id, gets);
+  }
 }
 
 module.exports = {
@@ -244,4 +263,5 @@ module.exports = {
   scrapeItems,
   scrapeRooms,
   scrapeMuseum,
+  scrapeMuseums
 }
