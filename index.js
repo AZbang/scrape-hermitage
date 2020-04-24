@@ -1,2 +1,2 @@
-const { scrapeMuseums } = require('./scrape-hermitage');
-scrapeMuseums({isImages: false});
+const { scrapeMuseums } = require("./scrape-hermitage");
+scrapeMuseums();
